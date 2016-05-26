@@ -17,9 +17,9 @@ import xmltodict
 id=40000
 
 def scurr(n):
-	n=n.replace(",","")
-	n=re.split(r'(\d+)',n)
-	return([n[0],n[1]])
+    n=n.replace(",","")
+    n=re.split(r'(\d+)',n)
+    return([n[0],n[1]])
 
 def insertToDB(dat):
     dbclient = pymongo.MongoClient("45.55.232.5:27017")
@@ -212,11 +212,13 @@ headers = {
 dbclient = pymongo.MongoClient("45.55.232.5:27017")
 dbclient.artists.authenticate("artSales", "Jl@B$!@#", mechanism='MONGODB-CR')
 db=dbclient.artists
-cursor=db.artist_list.find({})
+cursor=db.artist_list.find()
 skipped=list()
 for doc in cursor:
     skipcounter=1
-    if(doc['id']<=21):
+    print(doc['id'])
+    if(doc['id']<=445 or doc['artist']=='T & T'):
+        print("skipping " + doc['artist'])
         continue
     artist=doc['artist']
     temp=artist

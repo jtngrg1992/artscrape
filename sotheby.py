@@ -56,9 +56,14 @@ def get_scrape(url,artist):
                 print("Retrying")
         for result in data['searchResults']:
             print("Checking: " +  result['url'])
-            print(artist)
-            print(result['guaranteeLine'])
-            if(artist.upper() in result['guaranteeLine'].upper()):
+            if(not result.get('guaranteeLine')):
+                print("Guarantee line not found!!")
+                continue
+            artist_strpd=artist.replace(".","").replace(" ","")
+            print(artist_strpd )
+            match_strpd=result['guaranteeLine'].replace(".","").replace(" ","")
+            print(match_strpd)
+            if(artist_strpd.upper() in match_strpd.upper()):
 
                 global id
                 id+=1
@@ -179,10 +184,10 @@ def get_scrape(url,artist):
 
 for doc in cursor:
     try:
-        if(doc['id']<=1 or doc['artist']=="Arpita Singh"):
+        if(doc['id']<=6 ):
             continue
         artist=doc['artist']
-        # artist="Arpita Singh"
+        # artist="Om Prakash Sharma"
 
         temp=artist
         artist=urllib.quote_plus(artist)
@@ -218,15 +223,12 @@ for doc in cursor:
         print("Pages: " + str(pages))
         count=0
         while count<pages:
-
-            if(count==0):
-                offset=1
-            else:
-                offset=count*100
+            offset=count*100
             url='http://www.sothebys.com/en/search?keyword='+artist+'&pageSize=100&offset='+str(offset)+'&filters[0]=scontent_type_f|("LOT")&filters[1]=speriod_f|("Past")&currentFilter=scontent_type_f'
             print("Scraping from: " + url)
             get_scrape(url,temp)
             count+=1
+        
     except Exception as e:
         print(str(e))
         exit()
