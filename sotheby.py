@@ -18,7 +18,7 @@ from unidecode import unidecode
 dbclient = pymongo.MongoClient("45.55.232.5:27017")
 dbclient.artists.authenticate("artSales", "Jl@B$!@#", mechanism='MONGODB-CR')
 db=dbclient.artists
-cursor=db.artist_list.find({})
+cursor=db.artist_list.find().sort([('id',1)])
 skipped=list()
 id=50000
 
@@ -184,7 +184,7 @@ def get_scrape(url,artist):
 
 for doc in cursor:
     try:
-        if(doc['id']<=6 ):
+        if(doc['id']<=70):
             continue
         artist=doc['artist']
         # artist="Om Prakash Sharma"
