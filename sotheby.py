@@ -12,7 +12,16 @@ import pymongo
 from pymongo import MongoClient
 import urllib
 from unidecode import unidecode
+from HTMLParser import HTMLParser
 
+class MLStripper(HTMLParser):
+    def __init__(self):
+        self.reset()
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)    
 
 
 dbclient = pymongo.MongoClient("45.55.232.5:27017")
@@ -21,7 +30,11 @@ db=dbclient.artists
 cursor=db.artist_list.find().sort([('id',1)])
 skipped=list()
 id=50000
-
+def strip_tags(html):
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data()
+    
 def insertToDB(dat):
     dbclient = pymongo.MongoClient("45.55.232.5:27017")
     dbclient.artists.authenticate("artSales", "Jl@B$!@#", mechanism='MONGODB-CR')
@@ -31,17 +44,26 @@ def insertToDB(dat):
 
 def get_desc(link):
     description=image=""
-    data=requests.get(link).content
+    exception=False
+    while( not exception):
+        try:
+            data=requests.get(link).content
+            exception=True
+        except Exception as e:
+            print(str(e))
+            print("Retrying")
+            exception=False
+        
     soup=BeautifulSoup(data,'html.parser')
     if(soup.find('div',attrs={"class":"lotdetail-description-text"})):
-        description=soup.find('div',attrs={"class":"lotdetail-description-text"}).text.strip()
+        description=soup.find('div',attrs={"class":"lotdetail-description-text"})
     if(soup.find('div',attrs={'id':'main-image-container'})):
         text=soup.find('div',attrs={'id':'main-image-container'}).findAll('img')[0]['src']
         image="http://www.sothebys.com" + text
-    return description,image
+    return str(description),image
 
 def get_scrape(url,artist):
-        provenance=title=sale=lot=auction_name=auction_location=auction_date=description=art=""
+        provenance=title=sale=lot=auction_name=auction_location=auction_date=description=art=material=dim=painted_year=signed=""
         exception="true"
 
         while(exception=="true"):
@@ -69,7 +91,7 @@ def get_scrape(url,artist):
                 id+=1
                 print("FOUND MATCH!!")
                 print("ID: " + str(id))
-                artist2=result['guaranteeLine']
+                artist2=strip_tags(result['guaranteeLine'])
                 print("Artist: " + artist2)
                 if(result.get('title')):
                     auction_name=result['title']
@@ -86,13 +108,14 @@ def get_scrape(url,artist):
                 if(result.get('locations')):
                     auction_location=result['locations'][0]
                     print("Auction Location: " + auction_location)
-                # if(result.get('image')):
-                #     image="http://www.sothebys.com"+result['image']
-                    # print("Image: " + image)
+                if(result.get('mediumTxt')):
+                    material=result['mediumTxt']
+                    print("Material: " + material)
+              
                 if(result.get('lotNumber')):
                     lot=result['lotNumber']
                 if(result.get('titleOfWork')):
-                    art=result['titleOfWork']
+                    art=strip_tags(result['titleOfWork'])
                     print("Title: " + art)
                 if(result.get('currency')):
                     curr=result['currency']
@@ -134,14 +157,30 @@ def get_scrape(url,artist):
 
                 ###GETTING REST OF THE DESCRIPTION
                 description,image=get_desc(link)
-                print("Description: " + description)
+                ####Parsing description##########
+                description=description.split("<br/>")
+                
+                for descpt in description:
+                    if ('in.' in descpt.lower() or 'cm.' in descpt.lower()):
+                        dim=descpt.strip()
+                        print("Dimension: " + dim)
+                    if('executed' in descpt.lower()):
+                        painted_year=descpt.lower()
+                        painted_year=painted_year[painted_year.index('executed in')+ len('Executed in'):].strip()
+                        print("Year Painted: " + painted_year)
+                    if('signed' in descpt.lower()):
+                        signed=strip_tags(descpt).strip()
+                        print("Signed: " + signed)
+                description=strip_tags(str(description))
+                print("Description: " + str(description))
                 print("image: " + image)
                 print("Inserting into DB!!")
                 #CREATING DICT TO INSERT IN MONGODB#############################
 
                 var={}
-                var['PAINTED_YEAR']=""
+                var['PAINTED_YEAR']=painted_year
                 var['SIGNED?']=""
+                var['SIGNED_TEXT']=signed
                 var['MEDIUM']=""
                 var['AUCTION_LOCATION']=auction_location
                 var['ORIENTATION']=""
@@ -171,7 +210,7 @@ def get_scrape(url,artist):
                 var['PRICE_SOLD']=pricesold
                 var['DIMENTIONS_TEXT']=""
                 var['ID']=id
-                var['MATERIAL_TEXT']=""
+                var['MATERIAL_TEXT']=material
                 var['SALE_DATE']=auction_date
                 var['TITLE_OF_PAINTING']=art
                 var['DESCRIPTION']=description
@@ -183,52 +222,48 @@ def get_scrape(url,artist):
 
 
 for doc in cursor:
-    try:
-        if(doc['id']<=70):
-            continue
-        artist=doc['artist']
-        # artist="Om Prakash Sharma"
+    
+    artist=doc['artist']
+    # artist="Om Prakash Sharma"
 
-        temp=artist
-        artist=urllib.quote_plus(artist)
+    temp=artist
+    artist=urllib.quote_plus(artist)
 
-        print("Searching for artist: "+ artist)
-        ##GETTING DATA FROM API#########
+    print("Searching for artist: "+ artist)
+    ##GETTING DATA FROM API#########
 
-        url='http://www.sothebys.com/en/search?keyword='+artist+'&pageSize=11&offset=1&filters[0]=scontent_type_f|("LOT")&filters[1]=speriod_f|("Past")&currentFilter=scontent_type_f'
-        print(url)
-        exception="true"
+    url='http://www.sothebys.com/en/search?keyword='+artist+'&pageSize=11&offset=1&filters[0]=scontent_type_f|("LOT")&filters[1]=speriod_f|("Past")&currentFilter=scontent_type_f'
+    print(url)
+    exception="true"
 
-        while(exception=="true"):
-            try:
-                response = requests.get(url)
-            #   data=response.json()
-                data=json.loads(response.content.decode("utf-8"))
-                exception="false"
+    while(exception=="true"):
+        try:
+            response = requests.get(url)
+        #   data=response.json()
+            data=json.loads(response.content.decode("utf-8"))
+            exception="false"
 
-            except Exception as e:
-                exception="true"
-                print(str(e))
-                print("retrying")
-        # print(text)
-        #   data = json.load(text)
-        lots=data['numFound']
-        print("Total Lots: " + str(lots))
-        if(int(lots)<100):
-            pages=1
-        else:
-            pages=int(lots)/100
-            if(int(lots)%100>0):
-                pages+=1
-        print("Pages: " + str(pages))
-        count=0
-        while count<pages:
-            offset=count*100
-            url='http://www.sothebys.com/en/search?keyword='+artist+'&pageSize=100&offset='+str(offset)+'&filters[0]=scontent_type_f|("LOT")&filters[1]=speriod_f|("Past")&currentFilter=scontent_type_f'
-            print("Scraping from: " + url)
-            get_scrape(url,temp)
-            count+=1
+        except Exception as e:
+            exception="true"
+            print(str(e))
+            print("retrying")
+    # print(text)
+    #   data = json.load(text)
+    lots=data['numFound']
+    print("Total Lots: " + str(lots))
+    if(int(lots)<100):
+        pages=1
+    else:
+        pages=int(lots)/100
+        if(int(lots)%100>0):
+            pages+=1
+    print("Pages: " + str(pages))
+    count=0
+    while count<pages:
+        offset=count*100
+        url='http://www.sothebys.com/en/search?keyword='+artist+'&pageSize=100&offset='+str(offset)+'&filters[0]=scontent_type_f|("LOT")&filters[1]=speriod_f|("Past")&currentFilter=scontent_type_f'
+        print("Scraping from: " + url)
+        get_scrape(url,temp)
+        count+=1
         
-    except Exception as e:
-        print(str(e))
-        exit()
+    
